@@ -163,6 +163,7 @@ cython_debug/
 #
 
 .DS*
+*.out
 
 submit.sh
 logs/
