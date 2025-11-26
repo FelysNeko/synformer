@@ -5,8 +5,8 @@ chem:
     morgan_n_bits: 2048
   building_block_path: data/building_blocks/small.smi
   reaction_path: data/rxn_templates/scent_small_templates.txt
-  rxn_matrix: data/processed/comp_2048/small_matrix.pkl
-  fpindex: data/processed/comp_2048/small_fpindex.pkl
+  rxn_matrix: data/processed/comp_2048/test_matrix.pkl
+  fpindex: data/processed/comp_2048/test_fpindex.pkl
 
 data:
   init_stack_weighted_ratio: 0.90
