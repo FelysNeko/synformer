@@ -9,11 +9,10 @@ from typing import TypeAlias, overload
 
 import joblib
 import numpy as np
-import tdc
+from synformer.proxies import SimpleProxyWrapper
 import yaml
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from tdc.metadata import docking_target_info
 
 
 @dataclasses.dataclass(frozen=True)
@@ -55,7 +54,7 @@ def top_auc(buffer: MolBuffer, top_n: int, finish: bool, freq_log: int, max_orac
 class Oracle:
     def __init__(
         self,
-        evaluator: tdc.Evaluator | tdc.Oracle | Callable[[_SmilesString], float],
+        evaluator: Callable[[_SmilesString], float],
         output_dir: str | pathlib.Path,
         max_oracle_calls=10000,
         freq_log=100,
@@ -71,8 +70,8 @@ class Oracle:
 
         # self.mol_buffer = mol_buffer or OrderedDict()
         self.mol_buffer = mol_buffer or {}
-        self.sa_scorer = tdc.Oracle(name="SA")
-        self.diversity_evaluator = tdc.Evaluator(name="Diversity")
+        # self.sa_scorer = SimpleProxyWrapper("SA")
+        # self.diversity_evaluator = tdc.Evaluator(name="Diversity")
 
         self.last_log = 0
         self.output_dir = pathlib.Path(output_dir)
@@ -132,8 +131,10 @@ class Oracle:
             "avg_top1": np.max(scores),
             "avg_top10": np.mean(sorted(scores, reverse=True)[:10]),
             "avg_top100": np.mean(scores),
-            "avg_sa_top100": np.mean(self.sa_scorer(smis)),  # Top 100
-            "div_top100": self.diversity_evaluator(smis),  # Top 100
+            # "avg_sa_top100": np.mean(self.sa_scorer(smis)),  # Top 100
+            # "div_top100": self.diversity_evaluator(smis),  # Top 100
+            "avg_sa_top100": 0,  # Top 100
+            "div_top100": 0,  # Top 100
         }
         if finish:
             metrics["auc_top1"] = top_auc(self.mol_buffer, 1, finish, self.freq_log, self.max_oracle_calls)
@@ -321,29 +322,5 @@ class VinaSMILES:
             return -energy
 
 
-def get_vina_oracle(task_name: str):
-    if task_name == "3pbl":
-        pdbid = "3pbl"
-        return VinaSMILES(
-            receptor_pdbqt_file="./data/receptors/3pbl.pdbqt",
-            center=docking_target_info[pdbid]["center"],
-            box_size=docking_target_info[pdbid]["size"],
-            scorefunction="vina",
-            cpu=4,
-        )
-    else:
-        raise ValueError(f"Unknown Vina task: {task_name}")
-
-
-def get_oracle_evaluator(name: str) -> tdc.Evaluator | tdc.Oracle | Callable[[_SmilesString], float]:
-    try:
-        domain, task = name.split(":")
-    except ValueError:
-        raise ValueError(f"Invalid oracle name: {name}")
-
-    if domain == "tdc":
-        return tdc.Oracle(task)
-    elif domain == "vina":
-        return get_vina_oracle(task)
-    else:
-        raise ValueError(f"Unknown oracle domain: {domain}")
+def get_oracle_evaluator(name: str) -> Callable[[_SmilesString], float]:
+    return SimpleProxyWrapper(name)

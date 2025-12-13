@@ -167,3 +167,6 @@ cython_debug/
 
 submit.sh
 logs/
+oracle/
+cache/
+logs_molopt/
