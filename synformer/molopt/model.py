@@ -62,9 +62,9 @@ def sample(
             feat,
             rxn_matrix=rxn_matrix,
             fpindex=fpindex,
-            temperature_token=1.5,
-            temperature_reactant=0.2,
-            temperature_reaction=1.5,
+            temperature_token=1.0,
+            temperature_reactant=0.1,
+            temperature_reaction=1.0,
         )
         stacks = result.build()
     return result, stacks
