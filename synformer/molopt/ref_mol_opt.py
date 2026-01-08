@@ -38,8 +38,9 @@ def featurize_smiles(smiles: str, device: torch.device, repeat: int = 1):
 @click.option("model_path", "--model", type=click.Path(exists=True), required=True)
 @click.option("oracle_name", "--oracle", type=str, required=True)
 @click.option("smiles", "--smiles", type=str, required=True)
-@click.option("--lr", type=float, default=1e-4)
-@click.option("--batch-size", type=int, default=192)
+@click.option("--label", type=int, required=True)
+@click.option("--lr", type=float, default=1e-5)
+@click.option("--batch-size", type=int, default=64)
 @click.option("--max-call", type=int, default=10000)
 @click.option("--device", type=str, default="cuda")
 @click.option("--sigma", type=float, default=500.0)
@@ -51,6 +52,7 @@ def main(
     device: str,
     oracle_name: str,
     smiles: str,
+    label: int,
     lr: float,
     batch_size: int,
     max_call: int,
@@ -64,7 +66,7 @@ def main(
     log_dir = pathlib.Path(log_dir)
 
     timestamp = datetime.datetime.now().strftime("%y%m%d%H%M")
-    task_name = f"{oracle_name.replace(':', '_')}_{timestamp}"
+    task_name = f"{oracle_name.replace(':', '_')}_{label}_{timestamp}"
     task_dir = log_dir / task_name
     os.makedirs(task_dir, exist_ok=True)
     OmegaConf.save(cfgs, task_dir / "config.yaml")
@@ -100,9 +102,17 @@ def main(
                     loss_replay.backward()
 
             mol, feat = featurize_smiles(smiles, device, repeat=batch_size)
+            # feat = create_dummy_feature(batch_size, device)
             result, stacks = sample(model_agent, feat, rxn_matrix, fpindex)
-            tops = [stack.get_one_top().smiles for stack in stacks]
-            scores = [oracle(smi) for smi in tops]
+            # tops = [stack.get_one_top().smiles for stack in stacks]
+            scores = []
+            for stack in stacks:
+                try:
+                    score = float(oracle(stack.get_one_top().smiles))
+                    scores.append(score)
+                except:
+                    print("warning: empty stack")
+                    scores.append(0.0)
             scores = torch.tensor(scores, device=device, dtype=torch.float)
             # scores = torch.tensor([score_stack(oracle, stack) for stack in stacks], device=device, dtype=torch.float)
             loss = get_loss(model_agent, model_prior, result, scores, sigma)

@@ -165,8 +165,9 @@ cython_debug/
 .DS*
 *.out
 
-submit.sh
+*.sh
 logs/
+logs*/
 oracle/
 cache/
-logs_molopt/
+archive/

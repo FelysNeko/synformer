@@ -10,6 +10,8 @@ from synformer.chem.matrix import ReactantReactionMatrix
 from synformer.chem.mol import Molecule
 from synformer.models.synformer import Synformer
 
+import pandas as pd
+
 
 def load_model(model_path: pathlib.Path, config_path: pathlib.Path | None, device: torch.device):
     ckpt = torch.load(model_path, map_location="cpu")
@@ -48,16 +50,7 @@ def featurize_smiles(smiles: str, device: torch.device, repeat: int = 1):
     return mol, feat
 
 
-@click.command()
-@click.option("--smiles", type=str, default="COc1ccc(-c2ccnc(Nc3ccccc3)n2)cc1")
-@click.option("--model-path", type=click.Path(exists=True, path_type=pathlib.Path), required=True)
-@click.option("--config-path", type=click.Path(exists=True, path_type=pathlib.Path), required=False, default=None)
-@click.option("--device", type=torch.device, default="cuda")
-@click.option("--repeat", type=int, default=100)
-def main(smiles, model_path: pathlib.Path, config_path: pathlib.Path | None, device: torch.device, repeat: int):
-    model, fpindex, rxn_matrix = load_model(model_path, config_path, device)
-    mol, feat = featurize_smiles(smiles, device, repeat=repeat)
-
+def generate_analogs(model, feat, rxn_matrix, fpindex):
     with torch.inference_mode():
         result = model.generate_without_stack(
             feat,
@@ -67,26 +60,71 @@ def main(smiles, model_path: pathlib.Path, config_path: pathlib.Path | None, dev
             temperature_reactant=0.1,
             temperature_reaction=1.0,
         )
-        ll = model.get_log_likelihood(
-            code=result.code,
-            code_padding_mask=result.code_padding_mask,
-            token_types=result.token_types,
-            rxn_indices=result.rxn_indices,
-            reactant_fps=result.reactant_fps,
-            token_padding_mask=result.token_padding_mask,
-        )
 
     stacks = result.build()
-    cnt = 0
-    for i, stack in enumerate(stacks):
+    result = []
+    for stack in stacks:
         if stack.get_stack_depth() == 1:
             analog = stack.get_one_top()
-            ll_this = ll["total"][i].sum().item()
             cnt_rxn = stack.count_reactions()
-            print(f"{analog.sim(mol):.2f} {cnt_rxn} {ll_this:.4f} {analog.smiles}")
-            cnt += 1
-    print(f"Total: {cnt} / {len(stacks)}")
+            result.append((cnt_rxn, analog.smiles))
 
+    return pd.DataFrame(result, columns=['reactions', 'smiles'])
+
+
+@click.command()
+@click.option("--smiles", type=str, default="COc1ccc(-c2ccnc(Nc3ccccc3)n2)cc1")
+@click.option("--model-path", type=click.Path(exists=True, path_type=pathlib.Path), required=True)
+@click.option("--save-path", type=click.Path(exists=False, path_type=pathlib.Path), required=True)
+@click.option("--config-path", type=click.Path(exists=True, path_type=pathlib.Path), required=False, default=None)
+@click.option("--device", type=torch.device, default="cuda")
+@click.option("--repeat", type=int, default=200)
+def main(smiles, model_path: pathlib.Path, save_path: pathlib.Path, config_path: pathlib.Path | None, device: torch.device, repeat: int):
+    model, fpindex, rxn_matrix = load_model(model_path, config_path, device)
+    mol, feat = featurize_smiles(smiles, device, repeat=repeat)
+
+    # with torch.inference_mode():
+    #     result = model.generate_without_stack(
+    #         feat,
+    #         rxn_matrix=rxn_matrix,
+    #         fpindex=fpindex,
+    #         temperature_token=1.0,
+    #         temperature_reactant=0.1,
+    #         temperature_reaction=1.0,
+    #     )
+    #     ll = model.get_log_likelihood(
+    #         code=result.code,
+    #         code_padding_mask=result.code_padding_mask,
+    #         token_types=result.token_types,
+    #         rxn_indices=result.rxn_indices,
+    #         reactant_fps=result.reactant_fps,
+    #         token_padding_mask=result.token_padding_mask,
+    #     )
+
+    # stacks = result.build()
+    # cnt = 0
+    # for i, stack in enumerate(stacks):
+    #     if stack.get_stack_depth() == 1:
+    #         analog = stack.get_one_top()
+    #         ll_this = ll["total"][i].sum().item()
+    #         cnt_rxn = stack.count_reactions()
+    #         print(f"{analog.sim(mol):.2f} {cnt_rxn} {ll_this:.4f} {analog.smiles}")
+    #         cnt += 1
+    # print(f"Total: {cnt} / {len(stacks)}")
+
+    all_data = pd.DataFrame(columns=['reactions', 'smiles'])
+
+    while len(all_data) < 10000:
+        more_df = generate_analogs(model, feat, rxn_matrix, fpindex)
+        
+        all_data = pd.concat([all_data, more_df], ignore_index=True)
+        all_data = all_data.drop_duplicates('smiles')
+        
+        print(f"unique smi: {len(all_data)}")
+
+    all_data.to_csv(save_path, index=False)
+        
+        
 
 if __name__ == "__main__":
     main()

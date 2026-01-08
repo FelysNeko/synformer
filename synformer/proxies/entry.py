@@ -18,7 +18,7 @@ class SimpleProxyWrapper:
         else:
             proxy_value = self.oracle([smiles])[0]
             self.cache[smiles] = proxy_value
-        return proxy_value
+        return float(proxy_value)
     
     @staticmethod
     def _get_raw_oracle(oracle_name: str):
